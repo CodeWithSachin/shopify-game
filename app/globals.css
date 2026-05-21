@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Spykar tokens → shadcn HSL variables.
+ *
+ * Tailwind expects HSL triplets (no `hsl()`) so `hsl(var(--primary) / 0.5)`
+ * works for opacity. Verified pairs:
+ *   #E4002B  →  351 100% 45%   (spykar red)
+ *   #0A0A0A  →  0   0%   4%    (ink)
+ *   #1B2845  →  220 44%  19%   (indigo)
+ *   #F7F5F0  →  40  22%  96%   (cream)
+ *   #FFFFFF  →  0   0%   100%
+ *   #6B6B6B  →  0   0%   42%   (stone)
+ *   #2E7D32  →  123 46%  34%   (success)
+ */
+@layer base {
+  :root {
+    --background: 40 22% 96%;        /* cream */
+    --foreground: 0 0% 4%;           /* ink */
+
+    --card: 0 0% 100%;               /* paper */
+    --card-foreground: 0 0% 4%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+
+    --primary: 351 100% 45%;         /* spykar red */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 44% 19%;        /* indigo */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 40 18% 92%;
+    --muted-foreground: 0 0% 42%;    /* stone */
+
+    --accent: 351 100% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 351 100% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 351 100% 45%;
+
+    --radius: 12px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground;
+    font-family: theme("fontFamily.sans");
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* iOS scroll-bounce prevention for the game route */
+  body.no-bounce {
+    overscroll-behavior-y: none;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100dvh;
+  }
+}
+
+@layer utilities {
+  /* Use 100dvh where supported, fall back to 100vh */
+  .h-screen-dvh {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* Denim noise texture for the cart */
+  .denim-texture {
+    background-color: hsl(var(--secondary));
+    background-image:
+      repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.06) 0,
+        rgba(255, 255, 255, 0.06) 1px,
+        transparent 1px,
+        transparent 3px
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        rgba(0, 0, 0, 0.08) 0,
+        rgba(0, 0, 0, 0.08) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+  }
+
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-shake {
+      animation: none !important;
+    }
+  }
+}
