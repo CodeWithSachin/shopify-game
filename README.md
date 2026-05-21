@@ -128,3 +128,4 @@ These are the §8 items from `PLAN.md` that still need product/brand input:
 - **Phase 3** — Server-side coupon issuance via Shopify Admin API, Upstash rate limiting.
 - **Phase 4** — Theme App Extension App Embed Block + real sound + leaderboard + analytics.
 # shopify-game
+# shopify-game
