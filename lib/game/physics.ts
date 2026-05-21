@@ -9,9 +9,12 @@ export interface Rect {
   h: number;
 }
 
+export type FallingKind = "product" | "bomb";
+
 export interface FallingEntity {
   id: string;
   productId: string;
+  kind: FallingKind;
   x: number; // top-left, px
   y: number; // top-left, px
   w: number;

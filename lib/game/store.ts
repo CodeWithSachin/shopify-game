@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { FallingEntity } from "./physics";
-import { STARTING_LIVES } from "./difficulty";
+import { BOMB_PENALTY, STARTING_LIVES } from "./difficulty";
 import { makeCouponCode, tierForScore, type Tier } from "./tiers";
 
 export type GameState =
@@ -53,6 +53,7 @@ interface Actions {
 
   recordCatch: (entityId: string, basePoints: number, x: number, y: number) => void;
   recordMiss: () => void;
+  recordBombHit: (x: number, y: number) => void;
 
   tickTime: (dtSec: number) => void;
   consumeScorePop: (id: string) => void;
@@ -171,6 +172,22 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
     if (remaining <= 0) {
       get().endGame();
     }
+  },
+
+  /** Catching a bomb: deduct BOMB_PENALTY (floor 0), reset combo, shake. */
+  recordBombHit: (x, y) => {
+    const pop: ScorePop = {
+      id: `pop-${Date.now()}-${Math.random()}`,
+      x,
+      y,
+      value: -BOMB_PENALTY,
+    };
+    set((s) => ({
+      score: Math.max(0, s.score - BOMB_PENALTY),
+      combo: 0,
+      missFlashKey: s.missFlashKey + 1, // reuse shake animation
+      scorePops: [...s.scorePops, pop],
+    }));
   },
 
   tickTime: (dtSec) => {

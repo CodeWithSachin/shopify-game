@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type SoundCue = "catch" | "miss" | "tier_up" | "start" | "end" | "combo";
+export type SoundCue =
+  | "catch"
+  | "miss"
+  | "bomb_hit"
+  | "tier_up"
+  | "start"
+  | "end"
+  | "combo";
 
 const KEY = "spykar:catch:sound";
 

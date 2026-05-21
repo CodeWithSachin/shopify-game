@@ -15,18 +15,21 @@ import {
   type Rect,
 } from "@/lib/game/physics";
 import {
+  BOMB_PENALTY,
   GRAVITY,
   MAX_CONCURRENT_PRODUCTS,
   ROUND_DURATION_S,
   SPAWN_JITTER_MAX,
   SPAWN_JITTER_MIN,
   SPAWN_X_PADDING_MULT,
+  bombChanceAt,
   fallSpeedAt,
   spawnIntervalAt,
 } from "@/lib/game/difficulty";
 import { MOCK_PRODUCTS, isPremium, type MockProduct } from "@/lib/mock-products";
 import { Cart } from "./Cart";
 import { FallingProduct } from "./FallingProduct";
+import { FallingBomb } from "./FallingBomb";
 import { HUD } from "./HUD";
 import { StartScreen } from "./StartScreen";
 import { Countdown } from "./Countdown";
@@ -41,11 +44,22 @@ const CART_H = 64;
 const CART_BOTTOM_OFFSET = 48; // matches Tailwind bottom-12
 
 interface ActiveProduct extends FallingEntity {
+  kind: "product";
   product: MockProduct;
 }
 
+interface ActiveBomb extends FallingEntity {
+  kind: "bomb";
+}
+
+type ActiveItem = ActiveProduct | ActiveBomb;
+
 function pickProduct(active: MockProduct[]): MockProduct {
   return active[Math.floor(Math.random() * active.length)];
+}
+
+function newEntityId(): string {
+  return `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -68,21 +82,34 @@ function readActiveProducts(): MockProduct[] {
   }
 }
 
-function spawnEntity(
-  stageW: number,
-  product: MockProduct,
-  elapsed: number
-): ActiveProduct {
-  const speed = fallSpeedAt(elapsed) * (0.85 + Math.random() * 0.3);
+function makeProduct(product: MockProduct, elapsed: number): ActiveProduct {
+  const speed = fallSpeedAt(elapsed) * (0.9 + Math.random() * 0.2);
   return {
-    id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: newEntityId(),
     productId: product.id,
-    x: randRange(8, Math.max(16, stageW - PRODUCT_W - 8)),
+    kind: "product",
+    x: 0, // caller sets x with spread check
     y: -PRODUCT_H,
     w: PRODUCT_W,
     h: PRODUCT_H,
     vy: speed,
     product,
+  };
+}
+
+function makeBomb(elapsed: number): ActiveBomb {
+  // Bombs fall slightly slower than products at the same elapsed time so
+  // they're catchable to AVOID — not impossible to dodge.
+  const speed = fallSpeedAt(elapsed) * (0.85 + Math.random() * 0.15);
+  return {
+    id: newEntityId(),
+    productId: "bomb",
+    kind: "bomb",
+    x: 0,
+    y: -PRODUCT_H,
+    w: PRODUCT_W,
+    h: PRODUCT_H,
+    vy: speed,
   };
 }
 
@@ -108,7 +135,7 @@ export function GameCanvas() {
    * mutated object would compare equal and skip the re-render, leaving
    * cards glued to their spawn position above the stage.
    */
-  const entitiesRef = useRef<ActiveProduct[]>([]);
+  const entitiesRef = useRef<ActiveItem[]>([]);
   const [, setFrame] = useState(0);
 
   const [stage, setStage] = useState({ w: 0, h: 0 });
@@ -120,6 +147,7 @@ export function GameCanvas() {
   const startCountdown = useGameStore((s) => s.startCountdown);
   const recordCatch = useGameStore((s) => s.recordCatch);
   const recordMiss = useGameStore((s) => s.recordMiss);
+  const recordBombHit = useGameStore((s) => s.recordBombHit);
   const tickTime = useGameStore((s) => s.tickTime);
   const pause = useGameStore((s) => s.pause);
   const resume = useGameStore((s) => s.resume);
@@ -274,12 +302,15 @@ export function GameCanvas() {
             chosenX = candidate; // fall through with last candidate
           }
 
-          const product = pickProduct(activeListRef.current);
-          const e = spawnEntity(stage.w, product, elapsed);
-          e.x = chosenX;
+          // Roll bomb vs product based on the elapsed-time chance curve.
+          const isBomb = Math.random() < bombChanceAt(elapsed);
+          const item: ActiveItem = isBomb
+            ? makeBomb(elapsed)
+            : makeProduct(pickProduct(activeListRef.current), elapsed);
+          item.x = chosenX;
           // y-jitter so simultaneous-ish spawns don't share a release height
-          e.y = -PRODUCT_H - randRange(0, PRODUCT_H * 0.6);
-          entitiesRef.current.push(e);
+          item.y = -PRODUCT_H - randRange(0, PRODUCT_H * 0.6);
+          entitiesRef.current.push(item);
 
           // Schedule next spawn — base interval × jitter ∈ [MIN, MAX].
           const baseInterval = spawnIntervalAt(elapsed);
@@ -299,20 +330,29 @@ export function GameCanvas() {
 
         let caughtCount = 0;
         let missedCount = 0;
-        const remaining: ActiveProduct[] = [];
+        let bombHitCount = 0;
+        const remaining: ActiveItem[] = [];
 
         for (const e of entitiesRef.current) {
           stepEntity(e, dt, GRAVITY);
 
           if (caughtBy(e, cartRect)) {
-            const base = isPremium(e.product) ? 25 : 10;
-            recordCatch(e.id, base, e.x + e.w / 2, cartRect.y);
-            caughtCount += 1;
+            if (e.kind === "bomb") {
+              recordBombHit(e.x + e.w / 2, cartRect.y);
+              bombHitCount += 1;
+            } else {
+              const base = isPremium(e.product) ? 25 : 10;
+              recordCatch(e.id, base, e.x + e.w / 2, cartRect.y);
+              caughtCount += 1;
+            }
             continue;
           }
           if (e.y > groundY) {
-            recordMiss();
-            missedCount += 1;
+            // Only uncaught products cost a life — uncaught bombs are a win.
+            if (e.kind === "product") {
+              recordMiss();
+              missedCount += 1;
+            }
             continue;
           }
           remaining.push(e);
@@ -323,11 +363,21 @@ export function GameCanvas() {
         // avoid sound spam when multiple catches/misses happen in one tick.
         if (caughtCount > 0) playSound("catch");
         if (missedCount > 0) playSound("miss");
+        if (bombHitCount > 0) playSound("bomb_hit");
 
         // Trigger a React render so the new entity positions reach the DOM.
         setFrame((f) => (f + 1) % 1_000_000);
       },
-      [gameState, stage.w, stage.h, recordCatch, recordMiss, tickTime, playSound]
+      [
+        gameState,
+        stage.w,
+        stage.h,
+        recordCatch,
+        recordMiss,
+        recordBombHit,
+        tickTime,
+        playSound,
+      ]
     ),
     true
   );
@@ -360,20 +410,32 @@ export function GameCanvas() {
       {/* subtle denim seam */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-spykar-red via-transparent to-spykar-red opacity-40" />
 
-      {/* Falling products — primitive props so memo() picks up position changes */}
-      {entitiesRef.current.map((e) => (
-        <FallingProduct
-          key={e.id}
-          x={e.x}
-          y={e.y}
-          w={e.w}
-          h={e.h}
-          image={e.product.image}
-          silhouette={e.product.silhouette}
-          name={e.product.name}
-          premium={isPremium(e.product)}
-        />
-      ))}
+      {/* Falling items — products and bombs. Primitive props so memo() picks
+          up position changes from the per-frame physics mutations. */}
+      {entitiesRef.current.map((e) =>
+        e.kind === "bomb" ? (
+          <FallingBomb
+            key={e.id}
+            x={e.x}
+            y={e.y}
+            w={e.w}
+            h={e.h}
+            penalty={BOMB_PENALTY}
+          />
+        ) : (
+          <FallingProduct
+            key={e.id}
+            x={e.x}
+            y={e.y}
+            w={e.w}
+            h={e.h}
+            image={e.product.image}
+            silhouette={e.product.silhouette}
+            name={e.product.name}
+            premium={isPremium(e.product)}
+          />
+        )
+      )}
 
       {/* Cart */}
       {stage.w > 0 && (
@@ -386,7 +448,7 @@ export function GameCanvas() {
         />
       )}
 
-      {/* Score pops */}
+      {/* Score pops — positive in red, negative (bomb) in ink with a -X label */}
       <AnimatePresence>
         {scorePops.map((pop) => (
           <motion.div
@@ -395,10 +457,12 @@ export function GameCanvas() {
             animate={{ opacity: 0, y: -50, scale: 1.2 }}
             transition={{ duration: 0.7, ease: "easeOut" }}
             onAnimationComplete={() => consumeScorePop(pop.id)}
-            className="pointer-events-none absolute z-30 text-2xl font-black text-spykar-red drop-shadow-md"
+            className={`pointer-events-none absolute z-30 text-2xl font-black drop-shadow-md ${
+              pop.value < 0 ? "text-spykar-ink" : "text-spykar-red"
+            }`}
             style={{ left: pop.x, top: pop.y, transform: "translateX(-50%)" }}
           >
-            +{pop.value}
+            {pop.value >= 0 ? `+${pop.value}` : pop.value}
           </motion.div>
         ))}
       </AnimatePresence>
