@@ -18,6 +18,7 @@ import {
   BOMB_PENALTY,
   GRAVITY,
   MAX_CONCURRENT_PRODUCTS,
+  NON_DENIM_PENALTY,
   ROUND_DURATION_S,
   SPAWN_JITTER_MAX,
   SPAWN_JITTER_MIN,
@@ -147,7 +148,7 @@ export function GameCanvas() {
   const startCountdown = useGameStore((s) => s.startCountdown);
   const recordCatch = useGameStore((s) => s.recordCatch);
   const recordMiss = useGameStore((s) => s.recordMiss);
-  const recordBombHit = useGameStore((s) => s.recordBombHit);
+  const recordPenalty = useGameStore((s) => s.recordPenalty);
   const tickTime = useGameStore((s) => s.tickTime);
   const pause = useGameStore((s) => s.pause);
   const resume = useGameStore((s) => s.resume);
@@ -227,7 +228,8 @@ export function GameCanvas() {
   // Tier-up sound (only once per round end)
   const lastTierLabel = useRef<string | null>(null);
   useEffect(() => {
-    if (gameState === "ended" && finalTier?.prefix) {
+    // Trigger tier_up sound when the round ends on a tier above the base one.
+    if (gameState === "ended" && finalTier && finalTier.points > 100) {
       if (lastTierLabel.current !== finalTier.label) {
         playSound("tier_up");
         lastTierLabel.current = finalTier.label;
@@ -330,26 +332,34 @@ export function GameCanvas() {
 
         let caughtCount = 0;
         let missedCount = 0;
-        let bombHitCount = 0;
+        let penaltyCount = 0;
         const remaining: ActiveItem[] = [];
 
         for (const e of entitiesRef.current) {
           stepEntity(e, dt, GRAVITY);
 
           if (caughtBy(e, cartRect)) {
+            const popX = e.x + e.w / 2;
+            const popY = cartRect.y;
             if (e.kind === "bomb") {
-              recordBombHit(e.x + e.w / 2, cartRect.y);
-              bombHitCount += 1;
-            } else {
+              recordPenalty(BOMB_PENALTY, popX, popY);
+              penaltyCount += 1;
+            } else if (e.product.category === "Jeans") {
+              // Denim catch → positive points.
               const base = isPremium(e.product) ? 25 : 10;
-              recordCatch(e.id, base, e.x + e.w / 2, cartRect.y);
+              recordCatch(e.id, base, popX, popY);
               caughtCount += 1;
+            } else {
+              // Non-denim (belt/cap/hanger/bag/wallet) → penalty.
+              recordPenalty(NON_DENIM_PENALTY, popX, popY);
+              penaltyCount += 1;
             }
             continue;
           }
           if (e.y > groundY) {
-            // Only uncaught products cost a life — uncaught bombs are a win.
-            if (e.kind === "product") {
+            // Only uncaught DENIM products cost a life — letting a bomb or
+            // a non-denim accessory fall past is the correct play.
+            if (e.kind === "product" && e.product.category === "Jeans") {
               recordMiss();
               missedCount += 1;
             }
@@ -363,7 +373,7 @@ export function GameCanvas() {
         // avoid sound spam when multiple catches/misses happen in one tick.
         if (caughtCount > 0) playSound("catch");
         if (missedCount > 0) playSound("miss");
-        if (bombHitCount > 0) playSound("bomb_hit");
+        if (penaltyCount > 0) playSound("bomb_hit");
 
         // Trigger a React render so the new entity positions reach the DOM.
         setFrame((f) => (f + 1) % 1_000_000);
@@ -374,7 +384,7 @@ export function GameCanvas() {
         stage.h,
         recordCatch,
         recordMiss,
-        recordBombHit,
+        recordPenalty,
         tickTime,
         playSound,
       ]
@@ -432,7 +442,9 @@ export function GameCanvas() {
             image={e.product.image}
             silhouette={e.product.silhouette}
             name={e.product.name}
-            premium={isPremium(e.product)}
+            isDenim={e.product.category === "Jeans"}
+            points={isPremium(e.product) ? 25 : 10}
+            penalty={NON_DENIM_PENALTY}
           />
         )
       )}

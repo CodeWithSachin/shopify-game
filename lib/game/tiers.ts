@@ -1,32 +1,38 @@
-export interface Tier {
-  /** inclusive lower bound */
+/**
+ * Loyalty-points reward tiers.
+ *
+ *   score ∈ [0, 100)   → Tier 1 → 100 LP
+ *   score ∈ [100, 300) → Tier 2 → 200 LP
+ *   score ∈ [300, 400) → Tier 3 → 350 LP
+ *   score ∈ [400, ∞)   → Tier 4 → 400 LP
+ *
+ * Note `tierForScore` is the public lookup. The legacy `makeCouponCode` /
+ * `Tier` exports were removed when we switched from discount coupons to
+ * loyalty points — search & replace if you still see them referenced.
+ */
+
+export interface LoyaltyTier {
+  /** Inclusive lower score bound */
   min: number;
   label: string;
-  reward: string | null;
-  /** coupon code prefix, e.g. "CATCH10" — null = no coupon */
-  prefix: string | null;
+  /** Loyalty points awarded */
+  points: number;
+  /** Optional short marketing tagline */
+  tagline?: string;
 }
 
-export const TIERS: Tier[] = [
-  { min: 0, label: "Almost! Try again", reward: null, prefix: null },
-  { min: 100, label: "5% off", reward: "5% off", prefix: "CATCH5" },
-  { min: 250, label: "10% off", reward: "10% off", prefix: "CATCH10" },
-  { min: 500, label: "15% off + free shipping", reward: "15% off + free shipping", prefix: "CATCH15" },
+export const LOYALTY_TIERS: LoyaltyTier[] = [
+  { min: 0,   label: "Tier 1", points: 100, tagline: "Nice catch — keep going" },
+  { min: 100, label: "Tier 2", points: 200, tagline: "Solid haul" },
+  { min: 300, label: "Tier 3", points: 350, tagline: "Denim devotee" },
+  { min: 400, label: "Tier 4", points: 400, tagline: "Spykar royalty" },
 ];
 
-export function tierForScore(score: number): Tier {
-  // TIERS sorted ascending; find the highest min ≤ score.
-  let match = TIERS[0];
-  for (const t of TIERS) {
+/** Return the highest tier whose `min` is ≤ score. */
+export function loyaltyForScore(score: number): LoyaltyTier {
+  let match = LOYALTY_TIERS[0];
+  for (const t of LOYALTY_TIERS) {
     if (score >= t.min) match = t;
   }
   return match;
-}
-
-/** Returns null if the tier offers no coupon. */
-export function makeCouponCode(score: number): string | null {
-  const t = tierForScore(score);
-  if (!t.prefix) return null;
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${t.prefix}-${rand}`;
 }

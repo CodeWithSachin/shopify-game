@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Copy, RotateCcw, ShoppingBag, Trophy } from "lucide-react";
+import { RotateCcw, ShoppingBag, Sparkles, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,46 +10,43 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useGameStore } from "@/lib/game/store";
+import { MAX_SCORE } from "@/lib/game/difficulty";
+import { ClaimForm } from "./ClaimForm";
 
 interface EndScreenProps {
   onPlayAgain: () => void;
   shopUrl?: string;
 }
 
-export function EndScreen({ onPlayAgain, shopUrl = "https://www.spykar.com" }: EndScreenProps) {
+export function EndScreen({
+  onPlayAgain,
+  shopUrl = "https://www.spykar.com",
+}: EndScreenProps) {
   const gameState = useGameStore((s) => s.gameState);
   const score = useGameStore((s) => s.score);
   const highScore = useGameStore((s) => s.highScore);
-  const coupon = useGameStore((s) => s.finalCoupon);
+  const loyaltyPoints = useGameStore((s) => s.finalLoyaltyPoints);
   const tier = useGameStore((s) => s.finalTier);
   const caughtCount = useGameStore((s) => s.caughtCount);
 
-  const [copied, setCopied] = useState(false);
-
   const isNewBest = score >= highScore && score > 0;
-
-  const copy = async () => {
-    if (!coupon) return;
-    try {
-      await navigator.clipboard.writeText(coupon);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard blocked */
-    }
-  };
+  const atCap = score >= MAX_SCORE;
 
   return (
     <Dialog open={gameState === "ended"}>
-      <DialogContent hideClose className="max-w-md text-center">
+      <DialogContent
+        hideClose
+        className="max-h-[92vh] max-w-md overflow-y-auto text-center sm:max-w-lg"
+      >
         <div className="mx-auto mb-2 inline-flex items-center gap-1 rounded-full bg-spykar-ink/5 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.25em] text-spykar-ink">
           Round complete
         </div>
         <DialogTitle className="text-4xl">
-          {isNewBest ? "New personal best." : "Nice catch."}
+          {atCap ? "Maxed out." : isNewBest ? "New personal best." : "Nice catch."}
         </DialogTitle>
         <DialogDescription className="mt-1">
-          You caught {caughtCount} {caughtCount === 1 ? "product" : "products"}.
+          You caught {caughtCount}{" "}
+          {caughtCount === 1 ? "denim piece" : "denim pieces"}.
         </DialogDescription>
 
         <div className="my-4 grid grid-cols-2 gap-3">
@@ -60,6 +56,9 @@ export function EndScreen({ onPlayAgain, shopUrl = "https://www.spykar.com" }: E
             </div>
             <div className="text-4xl font-black leading-tight text-spykar-red tabular-nums">
               {score}
+            </div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              / {MAX_SCORE}
             </div>
           </div>
           <div className="rounded-md bg-spykar-cream p-3">
@@ -73,27 +72,38 @@ export function EndScreen({ onPlayAgain, shopUrl = "https://www.spykar.com" }: E
           </div>
         </div>
 
-        <div className="rounded-md border border-border bg-card p-4">
-          {tier?.reward && coupon ? (
-            <>
-              <Badge className="mb-2">{tier.reward}</Badge>
-              <div className="flex items-center justify-center gap-2">
-                <code className="rounded-md border border-dashed border-spykar-red/40 bg-spykar-red/5 px-3 py-2 text-lg font-bold tracking-widest text-spykar-red">
-                  {coupon}
-                </code>
-                <Button size="icon" variant="outline" onClick={copy} aria-label="Copy coupon">
-                  {copied ? <Check className="h-4 w-4 text-spykar-success" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Single-use · 24h expiry · min cart ₹1,499
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {tier?.label ?? "Almost! Score 100+ to unlock a coupon."}
-            </p>
+        {/* Loyalty reward */}
+        <div className="rounded-lg border border-spykar-red/30 bg-gradient-to-b from-spykar-red/5 to-transparent p-5">
+          <div className="flex items-center justify-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-spykar-red" />
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.25em] text-muted-foreground">
+              {tier?.label ?? "Loyalty reward"}
+            </span>
+          </div>
+          <div className="mt-1 flex items-baseline justify-center gap-2">
+            <div className="text-5xl font-black leading-none text-spykar-red tabular-nums">
+              {loyaltyPoints ?? 0}
+            </div>
+            <div className="text-xs font-bold uppercase tracking-widest text-spykar-ink">
+              Spykar
+              <br />
+              Loyalty Pts
+            </div>
+          </div>
+          {tier?.tagline && (
+            <Badge variant="outline" className="mt-3">
+              {tier.tagline}
+            </Badge>
           )}
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Credited to your Spykar account · redeemable on next purchase
+          </p>
+        </div>
+
+        {/* Claim form — Phase 1 simulates submit + shows toast. Phase 3 wires
+            the POST to /api/loyalty/claim. */}
+        <div className="mt-1">
+          <ClaimForm loyaltyPoints={loyaltyPoints ?? 0} />
         </div>
 
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">

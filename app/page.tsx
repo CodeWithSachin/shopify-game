@@ -48,9 +48,9 @@ export default function LandingPage() {
 						<span className="block text-spykar-red">Drop.</span>
 					</h1>
 					<p className="mt-5 max-w-md text-base text-muted-foreground sm:text-lg">
-						Sixty seconds. Falling denim, tees, jackets — grab as much Spykar as
-						your cart will hold. Score 100+ and walk away with a coupon. Made to
-						chill, built to last.
+						Thirty seconds. Falling denim, accessories, bombs — grab the jeans,
+						dodge the rest. Score 400+ for top-tier Spykar Loyalty Points. Made
+						to chill, built to last.
 					</p>
 					<div className="mt-7 flex flex-wrap gap-3">
 						<Button asChild size="xl" className="rounded-full px-10 shadow-lg">
@@ -81,26 +81,32 @@ export default function LandingPage() {
 
 					<div className="mt-6 rounded-lg border border-border bg-card p-5 shadow-sm">
 						<div className="mb-3 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.25em] text-muted-foreground">
-							<Gift className="h-3.5 w-3.5 text-spykar-red" /> Reward tiers
+							<Gift className="h-3.5 w-3.5 text-spykar-red" /> Loyalty
+							reward tiers
 						</div>
 						<ul className="space-y-2 text-sm">
 							<li className="flex items-baseline justify-between">
-								<span className="text-muted-foreground">100 – 249</span>
-								<span className="font-semibold">5% off</span>
+								<span className="text-muted-foreground">0 – 99</span>
+								<span className="font-semibold">100 LP</span>
 							</li>
 							<li className="flex items-baseline justify-between">
-								<span className="text-muted-foreground">250 – 499</span>
-								<span className="font-semibold">10% off</span>
+								<span className="text-muted-foreground">100 – 299</span>
+								<span className="font-semibold">200 LP</span>
 							</li>
 							<li className="flex items-baseline justify-between">
-								<span className="text-muted-foreground">500+</span>
+								<span className="text-muted-foreground">300 – 399</span>
+								<span className="font-semibold">350 LP</span>
+							</li>
+							<li className="flex items-baseline justify-between">
+								<span className="text-muted-foreground">400+</span>
 								<span className="font-semibold text-spykar-red">
-									15% off + free shipping
+									400 LP
 								</span>
 							</li>
 						</ul>
 						<p className="mt-3 text-[11px] text-muted-foreground">
-							Single-use · 24h expiry · min cart ₹1,499
+							Catch denim only — score caps at 500. Accessories &amp;
+							bombs deduct points.
 						</p>
 					</div>
 				</div>

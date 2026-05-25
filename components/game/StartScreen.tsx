@@ -30,8 +30,9 @@ export function StartScreen({ onStart }: StartScreenProps) {
           <span className="block text-spykar-red">Drop.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-sm text-sm text-muted-foreground sm:text-base">
-          Move your cart. Grab as much Spykar as you can in 60 seconds.
-          Score 100+ to unlock a coupon.
+          Catch <span className="font-semibold text-spykar-ink">denim only</span> in
+          30 seconds. Accessories and bombs deduct score. Score 400+ to earn
+          400 Spykar Loyalty Points.
         </p>
 
         <div className="mx-auto mt-6 grid max-w-xs grid-cols-2 gap-3 text-left text-xs">

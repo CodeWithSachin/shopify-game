@@ -2,8 +2,8 @@
 
 import { create } from "zustand";
 import type { FallingEntity } from "./physics";
-import { BOMB_PENALTY, STARTING_LIVES } from "./difficulty";
-import { makeCouponCode, tierForScore, type Tier } from "./tiers";
+import { MAX_SCORE, ROUND_DURATION_S, STARTING_LIVES } from "./difficulty";
+import { loyaltyForScore, type LoyaltyTier } from "./tiers";
 
 export type GameState =
   | "idle"
@@ -33,8 +33,8 @@ interface State {
   scorePops: ScorePop[];
   caughtFlashKey: number; // bump to trigger cart-bounce animation
   missFlashKey: number; // bump to trigger screen shake
-  finalCoupon: string | null;
-  finalTier: Tier | null;
+  finalLoyaltyPoints: number | null;
+  finalTier: LoyaltyTier | null;
   countdownValue: number; // 3, 2, 1
 }
 
@@ -53,7 +53,8 @@ interface Actions {
 
   recordCatch: (entityId: string, basePoints: number, x: number, y: number) => void;
   recordMiss: () => void;
-  recordBombHit: (x: number, y: number) => void;
+  /** Generic score-debit action — used by bombs and non-denim catches. */
+  recordPenalty: (amount: number, x: number, y: number) => void;
 
   tickTime: (dtSec: number) => void;
   consumeScorePop: (id: string) => void;
@@ -65,7 +66,7 @@ const INITIAL: State = {
   score: 0,
   combo: 0,
   lives: STARTING_LIVES,
-  timeRemaining: 60,
+  timeRemaining: ROUND_DURATION_S,
   elapsed: 0,
   products: [],
   caughtCount: 0,
@@ -74,7 +75,7 @@ const INITIAL: State = {
   scorePops: [],
   caughtFlashKey: 0,
   missFlashKey: 0,
-  finalCoupon: null,
+  finalLoyaltyPoints: null,
   finalTier: null,
   countdownValue: 3,
 };
@@ -121,11 +122,11 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
         /* ignore */
       }
     }
-    const tier = tierForScore(score);
+    const tier = loyaltyForScore(score);
     set({
       gameState: "ended",
       highScore: newHi,
-      finalCoupon: makeCouponCode(score),
+      finalLoyaltyPoints: tier.points,
       finalTier: tier,
     });
   },
@@ -141,21 +142,30 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
 
   recordCatch: (entityId, basePoints, x, y) => {
     const { combo, score } = get();
-    const newCombo = combo + 1;
-    const multiplier = newCombo >= 3 ? 2 : 1;
-    const points = basePoints * multiplier;
-    const pop: ScorePop = {
-      id: `pop-${Date.now()}-${Math.random()}`,
-      x,
-      y,
-      value: points,
-    };
+    // Combo multiplier removed — score = sum of base points so totals match
+    // the badges visible on the falling products. `combo` is still tracked
+    // as a streak counter for future use, but does not affect points.
+    const newScore = Math.min(MAX_SCORE, score + basePoints);
+    const actualDelta = newScore - score; // 0 once capped at MAX_SCORE
+
+    const popList: ScorePop[] =
+      actualDelta > 0
+        ? [
+            {
+              id: `pop-${Date.now()}-${Math.random()}`,
+              x,
+              y,
+              value: actualDelta,
+            },
+          ]
+        : [];
+
     set((s) => ({
-      score: score + points,
-      combo: newCombo,
+      score: newScore,
+      combo: combo + 1,
       caughtCount: s.caughtCount + 1,
       products: s.products.filter((p) => p.id !== entityId),
-      scorePops: [...s.scorePops, pop],
+      scorePops: [...s.scorePops, ...popList],
       caughtFlashKey: s.caughtFlashKey + 1,
     }));
   },
@@ -174,19 +184,31 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
     }
   },
 
-  /** Catching a bomb: deduct BOMB_PENALTY (floor 0), reset combo, shake. */
-  recordBombHit: (x, y) => {
-    const pop: ScorePop = {
-      id: `pop-${Date.now()}-${Math.random()}`,
-      x,
-      y,
-      value: -BOMB_PENALTY,
-    };
+  /**
+   * Generic score-debit. Caller passes the absolute penalty amount.
+   * Used by bombs (BOMB_PENALTY) and non-denim catches (NON_DENIM_PENALTY).
+   * Floors score at 0, resets combo, triggers the screen-shake animation.
+   */
+  recordPenalty: (amount, x, y) => {
+    const { score } = get();
+    const newScore = Math.max(0, score - amount);
+    const actualDelta = newScore - score; // negative or 0
+    const popList: ScorePop[] =
+      actualDelta < 0
+        ? [
+            {
+              id: `pop-${Date.now()}-${Math.random()}`,
+              x,
+              y,
+              value: actualDelta,
+            },
+          ]
+        : [];
     set((s) => ({
-      score: Math.max(0, s.score - BOMB_PENALTY),
+      score: newScore,
       combo: 0,
-      missFlashKey: s.missFlashKey + 1, // reuse shake animation
-      scorePops: [...s.scorePops, pop],
+      missFlashKey: s.missFlashKey + 1,
+      scorePops: [...s.scorePops, ...popList],
     }));
   },
 
