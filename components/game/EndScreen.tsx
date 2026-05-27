@@ -103,7 +103,7 @@ export function EndScreen({
         {/* Claim form — Phase 1 simulates submit + shows toast. Phase 3 wires
             the POST to /api/loyalty/claim. */}
         <div className="mt-1">
-          <ClaimForm loyaltyPoints={loyaltyPoints ?? 0} />
+          <ClaimForm loyaltyPoints={loyaltyPoints ?? 0} score={score} />
         </div>
 
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">

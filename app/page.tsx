@@ -17,7 +17,7 @@ export default function LandingPage() {
 						SPYKAR
 					</div>
 					<span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-						×&nbsp;Catch&nbsp;the&nbsp;Drop
+						×&nbsp;Feed&nbsp;your&nbsp;Greed
 					</span>
 				</div>
 				<nav className="flex items-center gap-2">
@@ -44,8 +44,8 @@ export default function LandingPage() {
 						Young &amp; Restless
 					</div>
 					<h1 className="text-5xl font-black leading-[0.95] tracking-tight text-spykar-ink sm:text-7xl">
-						Catch the
-						<span className="block text-spykar-red">Drop.</span>
+						Feed Your
+						<span className="block text-spykar-red">Greed.</span>
 					</h1>
 					<p className="mt-5 max-w-md text-base text-muted-foreground sm:text-lg">
 						Thirty seconds. Falling denim, accessories, bombs — grab the jeans,
@@ -70,19 +70,19 @@ export default function LandingPage() {
 
 				{/* Visual: brand swatch + reward tiers */}
 				<div className="relative">
-					<div className="grid grid-cols-3 gap-2">
+					{/* <div className="grid grid-cols-3 gap-2">
 						<div className="h-28 rounded-md bg-spykar-red" />
 						<div className="h-28 rounded-md bg-spykar-ink" />
 						<div className="h-28 rounded-md bg-spykar-indigo" />
 						<div className="h-16 rounded-md bg-spykar-cream ring-1 ring-border" />
 						<div className="h-16 rounded-md bg-white ring-1 ring-border" />
 						<div className="h-16 rounded-md bg-spykar-stone/30" />
-					</div>
+					</div> */}
 
 					<div className="mt-6 rounded-lg border border-border bg-card p-5 shadow-sm">
 						<div className="mb-3 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.25em] text-muted-foreground">
-							<Gift className="h-3.5 w-3.5 text-spykar-red" /> Loyalty
-							reward tiers
+							<Gift className="h-3.5 w-3.5 text-spykar-red" /> Loyalty reward
+							tiers
 						</div>
 						<ul className="space-y-2 text-sm">
 							<li className="flex items-baseline justify-between">
@@ -99,14 +99,12 @@ export default function LandingPage() {
 							</li>
 							<li className="flex items-baseline justify-between">
 								<span className="text-muted-foreground">400+</span>
-								<span className="font-semibold text-spykar-red">
-									400 LP
-								</span>
+								<span className="font-semibold text-spykar-red">400 LP</span>
 							</li>
 						</ul>
 						<p className="mt-3 text-[11px] text-muted-foreground">
-							Catch denim only — score caps at 500. Accessories &amp;
-							bombs deduct points.
+							Catch denim only — score caps at 500. Accessories &amp; bombs
+							deduct points.
 						</p>
 					</div>
 				</div>

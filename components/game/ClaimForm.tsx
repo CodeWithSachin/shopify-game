@@ -17,6 +17,9 @@ import { useToast } from "@/components/ui/toast";
 
 interface ClaimFormProps {
   loyaltyPoints: number;
+  /** Raw game score (out of MAX_SCORE). Displayed as a read-only field so
+   *  the player can confirm what's being submitted for verification. */
+  score: number;
   /** Called after successful submit (e.g. to close the dialog). */
   onSubmitted?: () => void;
 }
@@ -63,7 +66,7 @@ function validate(s: FormState): FieldErrors {
   return e;
 }
 
-export function ClaimForm({ loyaltyPoints, onSubmitted }: ClaimFormProps) {
+export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps) {
   const { toast } = useToast();
 
   const [form, setForm] = useState<FormState>({
@@ -103,8 +106,8 @@ export function ClaimForm({ loyaltyPoints, onSubmitted }: ClaimFormProps) {
 
     toast({
       type: "success",
-      title: `${loyaltyPoints} Loyalty Points credited`,
-      description: `Hi ${form.name.trim().split(/\s+/)[0]} — confirmation on its way to ${form.email}.`,
+      title: "Thank you",
+      description: `Hi ${form.name.trim().split(/\s+/)[0]} — once verified, ${loyaltyPoints} Loyalty Points will be added in T+5 days.`,
     });
 
     if (onSubmitted) window.setTimeout(onSubmitted, 1400);
@@ -112,15 +115,20 @@ export function ClaimForm({ loyaltyPoints, onSubmitted }: ClaimFormProps) {
 
   if (submitted) {
     return (
-      <div className="rounded-lg border border-spykar-success/40 bg-spykar-success/5 p-5 text-center">
-        <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-spykar-success text-white">
-          <Check className="h-5 w-5" strokeWidth={2.5} />
+      <div className="rounded-lg border border-spykar-success/40 bg-spykar-success/5 p-6 text-center">
+        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-spykar-success text-white shadow-md">
+          <Check className="h-6 w-6" strokeWidth={2.5} />
         </div>
-        <p className="mt-3 text-sm font-bold text-spykar-ink">
-          You&apos;re in. Points on the way.
+        <p className="mt-4 text-lg font-extrabold text-spykar-ink">
+          Thank You
         </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Watch your inbox for confirmation.
+        <p className="mx-auto mt-1.5 max-w-xs text-sm text-muted-foreground">
+          Once verified, we will be adding{" "}
+          <span className="font-semibold text-spykar-ink">
+            {loyaltyPoints} Loyalty Points
+          </span>{" "}
+          to your account in{" "}
+          <span className="font-semibold text-spykar-ink">T+5 days</span>.
         </p>
       </div>
     );
@@ -130,6 +138,21 @@ export function ClaimForm({ loyaltyPoints, onSubmitted }: ClaimFormProps) {
     <form onSubmit={onSubmit} noValidate className="space-y-3 text-left">
       <div className="text-center text-[10px] font-extrabold uppercase tracking-[0.25em] text-muted-foreground">
         Claim your {loyaltyPoints} Spykar LP
+      </div>
+
+      {/* Points Scored — read-only, auto-filled from the game state. Submitted
+          alongside name/phone/email so the loyalty team can verify the claim. */}
+      <div className="space-y-1">
+        <Label htmlFor="claim-score">Points Scored</Label>
+        <Input
+          id="claim-score"
+          name="score"
+          value={score}
+          readOnly
+          aria-readonly
+          tabIndex={-1}
+          className="cursor-not-allowed bg-spykar-cream font-extrabold tabular-nums text-spykar-ink"
+        />
       </div>
 
       <div className="space-y-1">
