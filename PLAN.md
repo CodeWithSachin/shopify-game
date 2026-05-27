@@ -1,4 +1,4 @@
-# Spykar — "Catch the Drop" Game
+# Spykar — "Feed your Greed" Game
 **Build Plan + Kickoff Prompt**
 
 A falling-product catcher game embedded into spykar.com (Shopify), with admin-managed product feed and score-based coupon rewards.
