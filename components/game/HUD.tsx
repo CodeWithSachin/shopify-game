@@ -15,6 +15,7 @@ interface HUDProps {
 export function HUD({ soundEnabled, onToggleSound, onTogglePause }: HUDProps) {
   const score = useGameStore((s) => s.score);
   const lives = useGameStore((s) => s.lives);
+  const maxLives = useGameStore((s) => s.maxLives);
   const timeRemaining = useGameStore((s) => s.timeRemaining);
   const gameState = useGameStore((s) => s.gameState);
 
@@ -70,18 +71,23 @@ export function HUD({ soundEnabled, onToggleSound, onTogglePause }: HUDProps) {
 
       {/* right: lives + controls */}
       <div className="pointer-events-auto flex flex-col items-end gap-2">
-        <div className="flex items-center gap-1 rounded-lg bg-white/95 px-3 py-2 shadow-md backdrop-blur">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Heart
-              key={i}
-              className={cn(
-                "h-5 w-5 transition-colors",
-                i < lives ? "fill-spykar-red text-spykar-red" : "fill-transparent text-muted-foreground/40"
-              )}
-              strokeWidth={2.2}
-            />
-          ))}
-        </div>
+        {/* Lives indicator — only rendered when the merchant has set a finite
+            lives count. In unlimited mode (default) the slot is hidden entirely
+            so the HUD stays uncluttered. */}
+        {maxLives !== null && (
+          <div className="flex items-center gap-1 rounded-lg bg-white/95 px-3 py-2 shadow-md backdrop-blur">
+            {Array.from({ length: maxLives }).map((_, i) => (
+              <Heart
+                key={i}
+                className={cn(
+                  "h-5 w-5 transition-colors",
+                  i < lives ? "fill-spykar-red text-spykar-red" : "fill-transparent text-muted-foreground/40"
+                )}
+                strokeWidth={2.2}
+              />
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <button
             type="button"

@@ -31,7 +31,35 @@ export const FALL_SPEED_PEAK_MULT = 2.3;
 export const GRAVITY = 80; // px / sec^2 — mild extra accel on top of base
 
 export const ROUND_DURATION_S = 30;
-export const STARTING_LIVES = 3;
+
+// ---- Lives ---------------------------------------------------------------
+/**
+ * Lives are dynamic and configured by the merchant from /admin/products.
+ *
+ *   null  → unlimited (default). Missed denim still costs the combo and
+ *           triggers a screen-shake, but does NOT end the round.
+ *   number → finite. Missing this many denim items ends the round.
+ *
+ * Persisted in localStorage under LIVES_STORAGE_KEY. The store reads this
+ * value at the start of every round so admin changes apply immediately.
+ */
+export const DEFAULT_LIVES: number | null = null;
+export const LIVES_STORAGE_KEY = "spykar:catch:lives";
+/** Hard cap so the admin form doesn't accept "1,000,000". */
+export const MAX_LIVES_SETTING = 99;
+
+export function readLivesSetting(): number | null {
+  if (typeof window === "undefined") return DEFAULT_LIVES;
+  try {
+    const raw = window.localStorage.getItem(LIVES_STORAGE_KEY);
+    if (raw === null || raw === "unlimited") return null;
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n) || n < 1) return null;
+    return Math.min(n, MAX_LIVES_SETTING);
+  } catch {
+    return DEFAULT_LIVES;
+  }
+}
 
 // ---- Scoring -------------------------------------------------------------
 /** Hard cap on score. Reaching MAX_SCORE caps additional catches silently. */

@@ -2,7 +2,12 @@
 
 import { create } from "zustand";
 import type { FallingEntity } from "./physics";
-import { MAX_SCORE, ROUND_DURATION_S, STARTING_LIVES } from "./difficulty";
+import {
+  DEFAULT_LIVES,
+  MAX_SCORE,
+  ROUND_DURATION_S,
+  readLivesSetting,
+} from "./difficulty";
 import { loyaltyForScore, type LoyaltyTier } from "./tiers";
 
 export type GameState =
@@ -23,7 +28,18 @@ interface State {
   gameState: GameState;
   score: number;
   combo: number; // catches in a row
+  /**
+   * Current lives remaining. When `maxLives` is `null` (unlimited),
+   * this field is unused and reads as `0` — the HUD checks `maxLives`
+   * to decide whether to render the lives indicator at all.
+   */
   lives: number;
+  /**
+   * Lives setting for this round, captured at countdown start so a
+   * mid-round admin edit can't shrink the player's life pool. `null`
+   * means unlimited (no decrement, no game-over on lives).
+   */
+  maxLives: number | null;
   timeRemaining: number; // seconds
   elapsed: number; // seconds since game start
   products: FallingEntity[];
@@ -65,7 +81,8 @@ const INITIAL: State = {
   gameState: "idle",
   score: 0,
   combo: 0,
-  lives: STARTING_LIVES,
+  lives: DEFAULT_LIVES ?? 0,
+  maxLives: DEFAULT_LIVES,
   timeRemaining: ROUND_DURATION_S,
   elapsed: 0,
   products: [],
@@ -85,13 +102,19 @@ const HIGH_SCORE_KEY = "spykar:catch:hi";
 export const useGameStore = create<State & Actions>()((set, get) => ({
   ...INITIAL,
 
-  startCountdown: () =>
+  startCountdown: () => {
+    // Snapshot the lives setting at countdown time. If admin changes it
+    // mid-round, the change applies next round — not retroactively.
+    const setting = readLivesSetting();
     set({
       ...INITIAL,
       highScore: get().highScore,
       gameState: "countdown",
       countdownValue: 3,
-    }),
+      maxLives: setting,
+      lives: setting ?? 0,
+    });
+  },
 
   tickCountdown: () => {
     const next = get().countdownValue - 1;
@@ -131,7 +154,17 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
     });
   },
 
-  reset: () => set({ ...INITIAL, highScore: get().highScore }),
+  reset: () => {
+    // Re-read the lives setting on reset so the "Play again" button picks
+    // up any admin edits that happened between rounds.
+    const setting = readLivesSetting();
+    set({
+      ...INITIAL,
+      highScore: get().highScore,
+      maxLives: setting,
+      lives: setting ?? 0,
+    });
+  },
 
   addProduct: (e) => set((s) => ({ products: [...s.products, e] })),
 
@@ -171,7 +204,19 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
   },
 
   recordMiss: () => {
-    const { lives } = get();
+    const { lives, maxLives } = get();
+
+    // Unlimited mode: track the miss for stats and trigger the screen-shake
+    // but don't decrement, and don't end the round on lives.
+    if (maxLives === null) {
+      set((s) => ({
+        combo: 0,
+        missedCount: s.missedCount + 1,
+        missFlashKey: s.missFlashKey + 1,
+      }));
+      return;
+    }
+
     const remaining = lives - 1;
     set((s) => ({
       lives: remaining,
