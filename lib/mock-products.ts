@@ -122,7 +122,7 @@ export const MOCK_PRODUCTS: MockProduct[] = [
 		handle: "onyx-straight-jet-black",
 		name: "Onyx Straight Jet Black",
 		category: "Jeans",
-		price: 2499,
+		price: 2599,
 		image: "/products/3.webp",
 		silhouette: JEANS("#1A1A1A"),
 	},

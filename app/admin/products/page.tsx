@@ -112,7 +112,7 @@ export default function AdminProductsPage() {
             <div className="h-5 w-px bg-border" />
             <div>
               <div className="text-[10px] font-extrabold uppercase tracking-[0.25em] text-muted-foreground">
-                Spykar × Catch the Drop
+                Spykar × Feed Your Greed
               </div>
               <h1 className="text-lg font-bold leading-tight">Game catalog</h1>
             </div>

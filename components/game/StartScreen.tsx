@@ -1,16 +1,25 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Play, Smartphone, Mouse, Trophy } from "lucide-react";
+import { Loader2, Play, Smartphone, Mouse, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGameStore } from "@/lib/game/store";
 
 interface StartScreenProps {
 	onStart: () => void;
+	/** False while game assets are still downloading — disables START. */
+	assetsReady?: boolean;
+	/** 0..1 asset download progress, shown while not ready. */
+	progress?: number;
 }
 
-export function StartScreen({ onStart }: StartScreenProps) {
+export function StartScreen({
+	onStart,
+	assetsReady = true,
+	progress = 1,
+}: StartScreenProps) {
 	const highScore = useGameStore((s) => s.highScore);
+	const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
 
 	return (
 		<motion.div
@@ -26,13 +35,13 @@ export function StartScreen({ onStart }: StartScreenProps) {
 					Young &amp; Restless
 				</div>
 				<h1 className="text-5xl font-black leading-[0.95] text-spykar-ink sm:text-6xl">
-					Catch the
-					<span className="block text-spykar-red">Drop.</span>
+					Feed Your
+					<span className="block text-spykar-red">Greed.</span>
 				</h1>
 				<p className="mx-auto mt-4 max-w-sm text-sm text-muted-foreground sm:text-base">
 					Catch{" "}
 					<span className="font-semibold text-spykar-ink">denim only</span> in
-					30 seconds. Accessories and bombs deduct score. Score 400+ to earn 400
+					30 seconds. Accessories and bombs deduct score. Score 400+ to earn 500
 					Spykar Loyalty Points.
 				</p>
 
@@ -60,18 +69,52 @@ export function StartScreen({ onStart }: StartScreenProps) {
 					<Button
 						size="xl"
 						onClick={onStart}
+						disabled={!assetsReady}
 						className="rounded-full px-12 shadow-lg"
 					>
-						<Play className="mr-2 h-5 w-5 fill-current" />
-						START
+						{assetsReady ? (
+							<>
+								<Play className="mr-2 h-5 w-5 fill-current" />
+								START
+							</>
+						) : (
+							<>
+								<Loader2 className="mr-2 h-5 w-5 animate-spin" />
+								Loading {pct}%
+							</>
+						)}
 					</Button>
 				</div>
-				<p className="mt-3 text-[11px] uppercase tracking-widest text-muted-foreground sr-only">
-					Press{" "}
-					<kbd className="rounded border border-border bg-white px-1.5 py-0.5 font-semibold">
-						Space
-					</kbd>{" "}
-					to start
+
+				{/* Asset download progress — only while still loading. */}
+				{!assetsReady && (
+					<div
+						className="mx-auto mt-4 h-1 w-48 overflow-hidden rounded-full bg-spykar-ink/10"
+						role="progressbar"
+						aria-label="Loading game assets"
+						aria-valuemin={0}
+						aria-valuemax={100}
+						aria-valuenow={pct}
+					>
+						<div
+							className="h-full bg-spykar-red transition-[width] duration-200"
+							style={{ width: `${pct}%` }}
+						/>
+					</div>
+				)}
+
+				<p className="mt-3 text-[11px] uppercase tracking-widest text-muted-foreground">
+					{assetsReady ? (
+						<span className="sr-only">
+							Press{" "}
+							<kbd className="rounded border border-border bg-white px-1.5 py-0.5 font-semibold">
+								Space
+							</kbd>{" "}
+							to start
+						</span>
+					) : (
+						"Downloading game assets…"
+					)}
 				</p>
 			</div>
 		</motion.div>

@@ -3,7 +3,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
-  title: "Spykar — Catch the Drop",
+  title: "Spykar — Feed Your Greed",
   description:
     "Catch falling Spykar gear to unlock a coupon. Young & Restless at heart.",
 };

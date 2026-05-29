@@ -6,6 +6,7 @@ import { useGameStore } from "@/lib/game/store";
 import { useGameLoop } from "@/lib/game/useGameLoop";
 import { useSound } from "@/lib/game/useSound";
 import { usePrefersReducedMotion } from "@/lib/game/useReducedMotion";
+import { useAssetPreloader } from "@/lib/game/useAssetPreloader";
 import {
 	caughtBy,
 	randRange,
@@ -146,6 +147,13 @@ export function GameCanvas() {
 	const [stage, setStage] = useState({ w: 0, h: 0 });
 	const reducedMotion = usePrefersReducedMotion();
 
+	// Background asset download. `assets.ready` gates the START button so the
+	// round never begins before the product images are cached. A ref mirror lets
+	// the keyboard handler read the latest value without re-binding listeners.
+	const assets = useAssetPreloader();
+	const assetsReadyRef = useRef(assets.ready);
+	assetsReadyRef.current = assets.ready;
+
 	const gameState = useGameStore((s) => s.gameState);
 	const caughtFlashKey = useGameStore((s) => s.caughtFlashKey);
 	const missFlashKey = useGameStore((s) => s.missFlashKey);
@@ -209,6 +217,12 @@ export function GameCanvas() {
 	useEffect(() => {
 		const onPointerMove = (e: PointerEvent) => handlePointer(e.clientX);
 		const onTouchMove = (e: TouchEvent) => {
+			// Only hijack touch (and block native scroll via preventDefault) while
+			// a round is live. When the round has ended, the end-screen dialog is
+			// open — if we kept calling preventDefault here, the dialog couldn't be
+			// scrolled on mobile. Returning early lets those touches scroll natively.
+			const gs = useGameStore.getState().gameState;
+			if (gs !== "playing" && gs !== "countdown") return;
 			if (e.touches[0]) {
 				handlePointer(e.touches[0].clientX);
 				e.preventDefault();
@@ -252,6 +266,8 @@ export function GameCanvas() {
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === " " || e.code === "Space") {
 				if (gameState === "idle" || gameState === "ended") {
+					// Don't start until the product images have finished downloading.
+					if (!assetsReadyRef.current) return;
 					e.preventDefault();
 					reset();
 					startCountdown();
@@ -407,6 +423,10 @@ export function GameCanvas() {
 	);
 
 	const startGame = useCallback(() => {
+		// Guard: never start before assets are cached (the START button is also
+		// disabled until then, this is belt-and-suspenders for the keyboard /
+		// "Play again" paths).
+		if (!assetsReadyRef.current) return;
 		reset();
 		startCountdown();
 		playSound("start");
@@ -541,7 +561,13 @@ export function GameCanvas() {
 
 			<Countdown />
 
-			{gameState === "idle" && <StartScreen onStart={startGame} />}
+			{gameState === "idle" && (
+				<StartScreen
+					onStart={startGame}
+					assetsReady={assets.ready}
+					progress={assets.progress}
+				/>
+			)}
 
 			<EndScreen onPlayAgain={startGame} />
 		</div>

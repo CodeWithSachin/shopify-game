@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { ArrowRight, Gamepad2, Gift, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AssetPreloader } from "@/components/AssetPreloader";
 
 export default function LandingPage() {
 	return (
 		<main className="relative min-h-screen overflow-hidden">
+			{/* Start downloading game assets the moment the player lands. */}
+			<AssetPreloader />
+
 			{/* Decorative denim bands */}
 			<div className="absolute inset-x-0 top-0 h-1 bg-spykar-red" />
 			<div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-spykar-red/10 blur-3xl" />
@@ -99,7 +103,7 @@ export default function LandingPage() {
 							</li>
 							<li className="flex items-baseline justify-between">
 								<span className="text-muted-foreground">400+</span>
-								<span className="font-semibold text-spykar-red">400 LP</span>
+								<span className="font-semibold text-spykar-red">500 LP</span>
 							</li>
 						</ul>
 						<p className="mt-3 text-[11px] text-muted-foreground">
