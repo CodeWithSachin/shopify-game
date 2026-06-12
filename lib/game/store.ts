@@ -9,6 +9,7 @@ import {
   readLivesSetting,
 } from "./difficulty";
 import { loyaltyForScore, type LoyaltyTier } from "./tiers";
+import { saveLastResult } from "./lastResult";
 
 export type GameState =
   | "idle"
@@ -136,7 +137,7 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
   },
 
   endGame: () => {
-    const { score, highScore } = get();
+    const { score, highScore, caughtCount } = get();
     const newHi = Math.max(highScore, score);
     if (typeof window !== "undefined") {
       try {
@@ -146,6 +147,22 @@ export const useGameStore = create<State & Actions>()((set, get) => ({
       }
     }
     const tier = loyaltyForScore(score);
+    const isNewBest = score >= newHi && score > 0;
+
+    // Persist a snapshot so /result can render after navigation / hard refresh.
+    // localStorage is the canonical source for the result page; the Zustand
+    // store is just transient working memory.
+    saveLastResult({
+      score,
+      caughtCount,
+      highScore: newHi,
+      isNewBest,
+      atCap: score >= MAX_SCORE,
+      finalLoyaltyPoints: tier.points,
+      finalTier: tier,
+      savedAt: Date.now(),
+    });
+
     set({
       gameState: "ended",
       highScore: newHi,

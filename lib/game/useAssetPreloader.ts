@@ -6,20 +6,28 @@ import { MOCK_PRODUCTS } from "@/lib/mock-products";
 /**
  * Asset preloading.
  *
- * The game shows falling product PNGs. If they haven't downloaded yet, the
- * first few drops would pop in late (or briefly show the inline-SVG fallback).
- * To avoid that, we download every product image up front — in the background
- * when the player lands — and gate the START button until they're all resolved.
+ * The game shows falling product images plus several brand chrome assets
+ * (cart sprite, idle/play backdrops, wordmark). If any of these aren't in the
+ * browser cache when the round begins, the player sees pop-in or unstyled
+ * placeholders. To avoid that, we download every blocking asset up front in
+ * the background when the player lands, and gate the START button until
+ * they're all resolved.
  *
  * Inline-SVG silhouettes are `data:` URIs (no network) so they're skipped.
- * The optional store backdrop (`/store-bg.png`) is loaded lazily via CSS and is
- * allowed to be missing, so it is intentionally NOT part of the blocking set.
  */
+const CHROME_ASSETS: string[] = [
+  "/Cart.webp",
+  "/Game-BG-2.webp",
+  "/Game-BG-3.webp",
+  "/Feed-Your-Greed-Logo-Unit.webp",
+];
+
 export function collectGameAssetUrls(): string[] {
   const urls = new Set<string>();
   for (const p of MOCK_PRODUCTS) {
     if (p.image && !p.image.startsWith("data:")) urls.add(p.image);
   }
+  for (const a of CHROME_ASSETS) urls.add(a);
   return Array.from(urls);
 }
 

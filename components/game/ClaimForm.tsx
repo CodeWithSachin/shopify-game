@@ -98,9 +98,44 @@ export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps)
     if (Object.keys(next).length > 0) return;
 
     setSubmitting(true);
-    // TODO Phase 3: POST to /api/loyalty/claim
-    //   { name, email, dialCode, phone, score, loyaltyPoints }
-    await new Promise((r) => window.setTimeout(r, 700));
+
+    // POST to /api/loyalty/claim. The server proxies to a Google Apps Script
+    // Web App that appends a row to the Spykar loyalty sheet. Errors surface
+    // as a toast and keep the form open so the user can retry.
+    try {
+      const res = await fetch("/api/loyalty/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          dialCode: form.dialCode,
+          phone: form.phone.replace(/\D/g, ""),
+          score,
+          loyaltyPoints,
+          submittedAt: new Date().toISOString(),
+        }),
+      });
+
+      if (!res.ok) {
+        setSubmitting(false);
+        toast({
+          type: "error",
+          title: "Couldn't save your details",
+          description: "Please try again in a moment.",
+        });
+        return;
+      }
+    } catch {
+      setSubmitting(false);
+      toast({
+        type: "error",
+        title: "Network error",
+        description: "Check your connection and try again.",
+      });
+      return;
+    }
+
     setSubmitting(false);
     setSubmitted(true);
 
@@ -136,14 +171,16 @@ export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps)
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-3 text-left">
-      <div className="text-center text-[10px] font-extrabold uppercase tracking-[0.25em] text-muted-foreground">
+      <div className="text-center text-[10px] font-extrabold uppercase tracking-[0.25em] text-white/80">
         Claim your {loyaltyPoints} Spykar LP
       </div>
 
       {/* Points Scored — read-only, auto-filled from the game state. Submitted
           alongside name/phone/email so the loyalty team can verify the claim. */}
       <div className="space-y-1">
-        <Label htmlFor="claim-score">Points Scored</Label>
+        <Label htmlFor="claim-score" className="text-white">
+          Points Scored
+        </Label>
         <Input
           id="claim-score"
           name="score"
@@ -156,7 +193,9 @@ export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps)
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="claim-name">Name</Label>
+        <Label htmlFor="claim-name" className="text-white">
+          Name
+        </Label>
         <Input
           id="claim-name"
           value={form.name}
@@ -171,7 +210,9 @@ export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps)
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="claim-email">Email</Label>
+        <Label htmlFor="claim-email" className="text-white">
+          Email
+        </Label>
         <Input
           id="claim-email"
           type="email"
@@ -188,7 +229,9 @@ export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps)
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="claim-phone">Phone</Label>
+        <Label htmlFor="claim-phone" className="text-white">
+          Phone
+        </Label>
         <div className="flex gap-2">
           <Select
             value={form.dialCode}
@@ -233,14 +276,14 @@ export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps)
         />
         <label
           htmlFor="claim-terms"
-          className="cursor-pointer text-xs text-muted-foreground"
+          className="cursor-pointer text-xs text-white/80"
         >
           I agree to the{" "}
           <a
             href="https://www.spykar.com/terms-conditions"
             target="_blank"
             rel="noreferrer"
-            className="font-semibold text-spykar-ink underline-offset-2 hover:underline"
+            className="font-semibold text-white underline-offset-2 hover:underline"
           >
             terms &amp; conditions
           </a>{" "}

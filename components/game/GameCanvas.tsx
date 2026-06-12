@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "@/lib/game/store";
 import { useGameLoop } from "@/lib/game/useGameLoop";
@@ -39,7 +40,7 @@ import { FallingBomb } from "./FallingBomb";
 import { HUD } from "./HUD";
 import { StartScreen } from "./StartScreen";
 import { Countdown } from "./Countdown";
-import { EndScreen } from "./EndScreen";
+// EndScreen dialog removed — round summary is now a full page at /result.
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
 
@@ -154,6 +155,7 @@ export function GameCanvas() {
 	const assetsReadyRef = useRef(assets.ready);
 	assetsReadyRef.current = assets.ready;
 
+	const router = useRouter();
 	const gameState = useGameStore((s) => s.gameState);
 	const caughtFlashKey = useGameStore((s) => s.caughtFlashKey);
 	const missFlashKey = useGameStore((s) => s.missFlashKey);
@@ -260,6 +262,27 @@ export function GameCanvas() {
 			lastTierLabel.current = null;
 		}
 	}, [gameState, finalTier, playSound]);
+
+	// Route to /result when a round ends.
+	//
+	// `didMount` skips the navigation on the very first effect run: if the
+	// component remounts with a stale "ended" gameState (e.g. user clicked
+	// "Play again" → /play → store still says "ended" briefly), we reset
+	// instead of bouncing them back to /result. From then on, any transition
+	// into "ended" pushes them to the result page.
+	const didMountRef = useRef(false);
+	useEffect(() => {
+		if (!didMountRef.current) {
+			didMountRef.current = true;
+			if (gameState === "ended") {
+				reset();
+			}
+			return;
+		}
+		if (gameState === "ended") {
+			router.push("/result");
+		}
+	}, [gameState, router, reset]);
 
 	// Keyboard: Space = start/resume, Esc = pause
 	useEffect(() => {
@@ -440,14 +463,21 @@ export function GameCanvas() {
 	return (
 		<div
 			ref={stageRef}
-			className="relative h-screen-dvh w-full overflow-hidden bg-gradient-to-b from-spykar-cream via-white to-spykar-cream/40 touch-none select-none"
+			className="relative h-screen-dvh w-full overflow-hidden bg-spykar-ink touch-none select-none"
 		>
-			{/* Spykar store backdrop @ 20% — drop /public/store-bg.jpg in to enable.
-          CSS background-image fails silently if the file is missing, so the
-          gradient just shows through. */}
+			{/* Play-screen backdrop. Game-BG-3 is the in-store render; we show it
+          near full opacity during play, and swap to the dark denim Game-BG-2
+          for the idle/start state so the foreground UI reads more cleanly. */}
 			<div
-				className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20"
-				style={{ backgroundImage: "url('/store-bg.webp')" }}
+				className="pointer-events-none absolute inset-0 bg-cover bg-center"
+				style={{
+					backgroundImage:
+						gameState === "playing" ||
+						gameState === "paused" ||
+						gameState === "countdown"
+							? "url('/Game-BG-3.webp')"
+							: "url('/Game-BG-2.webp')",
+				}}
 				aria-hidden
 			/>
 
@@ -569,7 +599,8 @@ export function GameCanvas() {
 				/>
 			)}
 
-			<EndScreen onPlayAgain={startGame} />
+			{/* End-of-round UI lives at /result; routing is handled in the
+			    `gameState === "ended"` effect above. */}
 		</div>
 	);
 }

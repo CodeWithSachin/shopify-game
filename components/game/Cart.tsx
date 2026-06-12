@@ -2,7 +2,6 @@
 
 import { forwardRef } from "react";
 import { motion } from "framer-motion";
-import { ShoppingCart } from "lucide-react";
 
 interface CartProps {
   width: number;
@@ -12,9 +11,13 @@ interface CartProps {
 }
 
 /**
- * The cart is positioned absolutely. The parent handles X translation via
- * inline transform on the outer element through the forwarded ref so we can
- * update position at 60fps without React re-renders.
+ * The cart sprite. Renders the brand-supplied PNG (public/Cart.webp) — the
+ * artwork already includes the Spykar swoosh and red body, so the wrapper is
+ * intentionally minimal (no denim texture, ring, or stitched-edge overlays).
+ *
+ * Positioning: this element is absolutely placed; the parent updates the
+ * outer transform via the forwarded ref at 60fps without re-renders. The inner
+ * <motion.div> only handles the per-catch bounce animation.
  */
 export const Cart = forwardRef<HTMLDivElement, CartProps>(function Cart(
   { width, height, bounceKey, reducedMotion },
@@ -30,22 +33,20 @@ export const Cart = forwardRef<HTMLDivElement, CartProps>(function Cart(
         key={bounceKey}
         initial={false}
         animate={
-          reducedMotion
-            ? undefined
-            : { scale: [1, 1.12, 1], y: [0, -6, 0] }
+          reducedMotion ? undefined : { scale: [1, 1.12, 1], y: [0, -6, 0] }
         }
         transition={{ duration: 0.28, ease: "easeOut" }}
-        className="denim-texture relative h-full w-full overflow-hidden rounded-md shadow-xl ring-2 ring-spykar-red/60"
+        className="relative h-full w-full"
       >
-        {/* stitched edge */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-1.5 border-b border-spykar-red/30 bg-gradient-to-b from-white/10 to-transparent" />
-        <div className="absolute inset-0 flex items-center justify-center text-white/90">
-          <ShoppingCart className="h-7 w-7" strokeWidth={2.5} aria-hidden />
-        </div>
-        {/* spykar tab */}
-        <div className="absolute right-1.5 top-1.5 rounded-sm bg-spykar-red px-1.5 py-0.5 text-[9px] font-extrabold tracking-widest text-white">
-          SPYKAR
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/Cart.webp"
+          alt="Cart"
+          width={width}
+          height={height}
+          draggable={false}
+          className="h-full w-full select-none object-contain drop-shadow-[0_10px_18px_rgba(0,0,0,0.35)]"
+        />
       </motion.div>
     </div>
   );
