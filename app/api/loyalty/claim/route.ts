@@ -9,38 +9,28 @@ import { NextResponse } from "next/server";
  * Why proxy instead of POSTing to Apps Script directly from the browser?
  *   - Keeps the webhook URL off the client bundle.
  *   - Lets us validate the payload before it hits the sheet.
- *   - Avoids the CORS dance with Apps Script Web Apps (which set permissive
- *     CORS by default, but tightening it would break a direct client call).
+ *   - Avoids the CORS dance with Apps Script Web Apps.
  *
- * Apps Script setup (one-time, on the merchant's side):
- *   1. Open the target Google Sheet → Extensions → Apps Script.
- *   2. Paste in something like:
+ * --- Apps Script quirks worth knowing ---
  *
- *        function doPost(e) {
- *          const data = JSON.parse(e.postData.contents);
- *          const sheet = SpreadsheetApp.getActiveSheet();
- *          sheet.appendRow([
- *            new Date(),
- *            data.name, data.email, data.dialCode, data.phone,
- *            data.score, data.loyaltyPoints,
- *          ]);
- *          return ContentService
- *            .createTextOutput(JSON.stringify({ ok: true }))
- *            .setMimeType(ContentService.MimeType.JSON);
- *        }
+ * 1. The deployment URL must end in `/exec`, NOT `/dev`. The `/dev` URL only
+ *    works while you're signed in.
+ * 2. The deployment must be: Execute as "Me", Access "Anyone". Anything else
+ *    refuses anonymous server calls.
+ * 3. POSTing to `/exec` follows a 302 redirect to
+ *    `script.googleusercontent.com/macros/echo?...` — Node's fetch follows
+ *    redirects by default. We log the final URL on failure so you can spot
+ *    if redirects are being blocked.
+ * 4. Cold starts can take 5–10 seconds; we allow a generous 20 s timeout.
  *
- *   3. Deploy → New deployment → Type "Web app" → Execute as "Me", Access
- *      "Anyone". Copy the resulting `/exec` URL.
- *   4. Add the URL to Vercel project env vars as `SHEETS_WEBHOOK_URL`.
+ * --- Debugging GET ---
  *
- * If the env var is missing, this route still returns 200 (so QA against a
- * non-production env doesn't surface a confusing error to the user) — but logs
- * a warning and reports `persisted: false` in the response body.
+ * `GET /api/loyalty/claim?ping=1` returns a small JSON status object so you
+ * can verify (a) the route is deployed, (b) the env var is set, without
+ * having to submit a real claim. This NEVER reveals the webhook URL.
  */
 
-// Force Node runtime so we get a real `fetch` against external hosts.
 export const runtime = "nodejs";
-// Don't try to cache POST responses.
 export const dynamic = "force-dynamic";
 
 interface ClaimPayload {
@@ -59,6 +49,25 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  if (url.searchParams.get("ping") !== "1") {
+    return NextResponse.json(
+      { error: "method_not_allowed" },
+      { status: 405 }
+    );
+  }
+  const webhookUrl = process.env.SHEETS_WEBHOOK_URL;
+  return NextResponse.json({
+    ok: true,
+    hasWebhook: Boolean(webhookUrl),
+    // Last 12 chars only — enough to spot the wrong deployment without leaking
+    webhookHint: webhookUrl ? `…${webhookUrl.slice(-12)}` : null,
+    runtime: "nodejs",
+    region: process.env.VERCEL_REGION ?? "unknown",
+  });
+}
+
 export async function POST(req: Request) {
   let body: ClaimPayload;
   try {
@@ -67,8 +76,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  // Loose validation — the form validates client-side; this is a server-side
-  // safety net against obvious bad payloads, not a strict schema.
   if (!isNonEmptyString(body.name)) {
     return NextResponse.json(
       { error: "missing_field", field: "name" },
@@ -81,18 +88,10 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (
-    isNonEmptyString(body.email) &&
-    !EMAIL_RE.test(body.email)
-  ) {
-    return NextResponse.json(
-      { error: "invalid_email" },
-      { status: 400 }
-    );
+  if (isNonEmptyString(body.email) && !EMAIL_RE.test(body.email)) {
+    return NextResponse.json({ error: "invalid_email" }, { status: 400 });
   }
 
-  // Normalize the payload before forwarding so the sheet rows are consistent
-  // regardless of how the client formatted things.
   const normalized = {
     name: String(body.name).trim(),
     email: isNonEmptyString(body.email) ? body.email.trim() : "",
@@ -102,16 +101,13 @@ export async function POST(req: Request) {
       : "",
     score: Number(body.score) || 0,
     loyaltyPoints: Number(body.loyaltyPoints) || 0,
-    submittedAt:
-      isNonEmptyString(body.submittedAt)
-        ? body.submittedAt
-        : new Date().toISOString(),
+    submittedAt: isNonEmptyString(body.submittedAt)
+      ? body.submittedAt
+      : new Date().toISOString(),
   };
 
   const webhookUrl = process.env.SHEETS_WEBHOOK_URL;
   if (!webhookUrl) {
-    // No webhook configured — accept the submission so the UI flow still works
-    // in dev / preview environments, and surface the payload in server logs.
     console.warn(
       "[loyalty/claim] SHEETS_WEBHOOK_URL not set — claim not persisted:",
       normalized
@@ -119,33 +115,89 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, persisted: false });
   }
 
+  // Some operator-friendly diagnostics on the URL itself before we even fetch.
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(\?.*)?$/.test(webhookUrl)) {
+    console.error(
+      "[loyalty/claim] SHEETS_WEBHOOK_URL doesn't look like an Apps Script /exec URL:",
+      webhookUrl
+    );
+    return NextResponse.json(
+      {
+        error: "bad_webhook_url",
+        hint: "Expected https://script.google.com/macros/s/.../exec",
+      },
+      { status: 500 }
+    );
+  }
+
+  const startedAt = Date.now();
+  let sheetRes: Response;
   try {
-    const sheetRes = await fetch(webhookUrl, {
+    sheetRes = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(normalized),
-      // Apps Script can be slow on cold start — give it a generous timeout
-      // via AbortSignal rather than relying on the platform default.
-      signal: AbortSignal.timeout(10_000),
+      redirect: "follow",
+      // Generous: Apps Script cold starts can take 10+ s.
+      signal: AbortSignal.timeout(20_000),
     });
-    if (!sheetRes.ok) {
-      console.error(
-        "[loyalty/claim] Sheets webhook returned non-ok:",
-        sheetRes.status,
-        await sheetRes.text().catch(() => "")
-      );
-      return NextResponse.json(
-        { error: "sheet_write_failed" },
-        { status: 502 }
-      );
-    }
   } catch (err) {
-    console.error("[loyalty/claim] Sheets webhook fetch error:", err);
+    const ms = Date.now() - startedAt;
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[loyalty/claim] Sheets webhook fetch threw after ${ms}ms:`,
+      message
+    );
     return NextResponse.json(
-      { error: "sheet_unreachable" },
+      { error: "sheet_unreachable", detail: message, ms },
       { status: 502 }
     );
   }
 
-  return NextResponse.json({ ok: true, persisted: true });
+  const responseText = await sheetRes.text().catch(() => "");
+  const ms = Date.now() - startedAt;
+
+  if (!sheetRes.ok) {
+    console.error(
+      `[loyalty/claim] Sheets webhook returned ${sheetRes.status} after ${ms}ms (final URL: ${sheetRes.url}). Body:`,
+      responseText.slice(0, 500)
+    );
+    return NextResponse.json(
+      {
+        error: "sheet_write_failed",
+        status: sheetRes.status,
+        finalUrl: sheetRes.url,
+        body: responseText.slice(0, 500),
+        ms,
+      },
+      { status: 502 }
+    );
+  }
+
+  // Apps Script sometimes returns 200 with `{ ok: false, error }` in the body
+  // (e.g. if the script itself threw). Try to surface that.
+  try {
+    const parsed = JSON.parse(responseText) as { ok?: boolean; error?: string };
+    if (parsed && parsed.ok === false) {
+      console.error(
+        `[loyalty/claim] Apps Script reported failure after ${ms}ms:`,
+        parsed
+      );
+      return NextResponse.json(
+        {
+          error: "script_reported_failure",
+          scriptError: parsed.error ?? "unknown",
+          ms,
+        },
+        { status: 502 }
+      );
+    }
+  } catch {
+    // Non-JSON response is fine — Apps Script returns text/html sometimes.
+  }
+
+  console.log(
+    `[loyalty/claim] Sheets webhook ok in ${ms}ms (final URL host: ${new URL(sheetRes.url).host})`
+  );
+  return NextResponse.json({ ok: true, persisted: true, ms });
 }
