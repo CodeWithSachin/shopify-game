@@ -1,33 +1,33 @@
 import { NextResponse } from "next/server";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * POST /api/loyalty/claim
  *
- * Receives the end-of-round claim form payload and forwards it to a Google
- * Sheets Apps Script Web App (URL configured via `SHEETS_WEBHOOK_URL` env var).
+ * Persists the end-of-round claim form payload into Supabase.
  *
- * Why proxy instead of POSTing to Apps Script directly from the browser?
- *   - Keeps the webhook URL off the client bundle.
- *   - Lets us validate the payload before it hits the sheet.
- *   - Avoids the CORS dance with Apps Script Web Apps.
+ * Why Supabase (instead of Google Sheets / Apps Script)?
+ *   - Real auth headers, no "Anyone with link" quirks.
+ *   - Direct REST insert via the official client — no proxy redirects.
+ *   - Service-role key stays server-only; client bundle never sees it.
  *
- * --- Apps Script quirks worth knowing ---
+ * --- Required env vars ---
+ *   SUPABASE_URL                — e.g. https://abcdwxyz.supabase.co
+ *   SUPABASE_SERVICE_ROLE_KEY   — from Supabase → Settings → API → "service_role"
  *
- * 1. The deployment URL must end in `/exec`, NOT `/dev`. The `/dev` URL only
- *    works while you're signed in.
- * 2. The deployment must be: Execute as "Me", Access "Anyone". Anything else
- *    refuses anonymous server calls.
- * 3. POSTing to `/exec` follows a 302 redirect to
- *    `script.googleusercontent.com/macros/echo?...` — Node's fetch follows
- *    redirects by default. We log the final URL on failure so you can spot
- *    if redirects are being blocked.
- * 4. Cold starts can take 5–10 seconds; we allow a generous 20 s timeout.
+ * The service-role key bypasses Row Level Security. Keep it server-only —
+ * NEVER prefix it with NEXT_PUBLIC_, never log it, never return it.
  *
- * --- Debugging GET ---
+ * --- Required table ---
+ *   See SUPABASE_SETUP.md (or the inline CREATE TABLE statement in the
+ *   docs the assistant provided). The table is named `claims` and has
+ *   columns: name, email, dial_code, phone, score, loyalty_points,
+ *   submitted_at, created_at.
  *
- * `GET /api/loyalty/claim?ping=1` returns a small JSON status object so you
- * can verify (a) the route is deployed, (b) the env var is set, without
- * having to submit a real claim. This NEVER reveals the webhook URL.
+ * --- Diagnostics ---
+ *   GET /api/loyalty/claim?ping=1  →  small status JSON, useful to verify
+ *                                     the route is deployed and env vars
+ *                                     are present (does NOT leak keys).
  */
 
 export const runtime = "nodejs";
@@ -49,6 +49,19 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+/**
+ * Lazily create the Supabase client at request time so missing env vars
+ * surface as a 500 we can surface, not a build-time crash.
+ */
+function getSupabase(): SupabaseClient | null {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   if (url.searchParams.get("ping") !== "1") {
@@ -57,12 +70,10 @@ export async function GET(req: Request) {
       { status: 405 }
     );
   }
-  const webhookUrl = process.env.SHEETS_WEBHOOK_URL;
   return NextResponse.json({
     ok: true,
-    hasWebhook: Boolean(webhookUrl),
-    // Last 12 chars only — enough to spot the wrong deployment without leaking
-    webhookHint: webhookUrl ? `…${webhookUrl.slice(-12)}` : null,
+    hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     runtime: "nodejs",
     region: process.env.VERCEL_REGION ?? "unknown",
   });
@@ -76,6 +87,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
+  // Server-side validation. The form validates client-side too; these checks
+  // are the safety net against direct API calls with bad data.
   if (!isNonEmptyString(body.name)) {
     return NextResponse.json(
       { error: "missing_field", field: "name" },
@@ -92,112 +105,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_email" }, { status: 400 });
   }
 
-  const normalized = {
+  // Map camelCase client payload → snake_case Postgres columns.
+  const row = {
     name: String(body.name).trim(),
-    email: isNonEmptyString(body.email) ? body.email.trim() : "",
-    dialCode: isNonEmptyString(body.dialCode) ? body.dialCode : "",
+    email: isNonEmptyString(body.email) ? body.email.trim() : null,
+    dial_code: isNonEmptyString(body.dialCode) ? body.dialCode : null,
     phone: isNonEmptyString(body.phone)
       ? body.phone.replace(/\D/g, "")
       : "",
     score: Number(body.score) || 0,
-    loyaltyPoints: Number(body.loyaltyPoints) || 0,
-    submittedAt: isNonEmptyString(body.submittedAt)
+    loyalty_points: Number(body.loyaltyPoints) || 0,
+    submitted_at: isNonEmptyString(body.submittedAt)
       ? body.submittedAt
       : new Date().toISOString(),
   };
 
-  const webhookUrl = process.env.SHEETS_WEBHOOK_URL;
-  if (!webhookUrl) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    // No Supabase configured — accept the submission so the UI works in
+    // preview / local dev, and log the payload so it isn't silently lost.
     console.warn(
-      "[loyalty/claim] SHEETS_WEBHOOK_URL not set — claim not persisted:",
-      normalized
+      "[loyalty/claim] Supabase env vars not set — claim not persisted:",
+      row
     );
     return NextResponse.json({ ok: true, persisted: false });
   }
 
-  // Some operator-friendly diagnostics on the URL itself before we even fetch.
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(\?.*)?$/.test(webhookUrl)) {
-    console.error(
-      "[loyalty/claim] SHEETS_WEBHOOK_URL doesn't look like an Apps Script /exec URL:",
-      webhookUrl
-    );
-    return NextResponse.json(
-      {
-        error: "bad_webhook_url",
-        hint: "Expected https://script.google.com/macros/s/.../exec",
-      },
-      { status: 500 }
-    );
-  }
-
   const startedAt = Date.now();
-  let sheetRes: Response;
-  try {
-    sheetRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(normalized),
-      redirect: "follow",
-      // Generous: Apps Script cold starts can take 10+ s.
-      signal: AbortSignal.timeout(20_000),
-    });
-  } catch (err) {
-    const ms = Date.now() - startedAt;
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[loyalty/claim] Sheets webhook fetch threw after ${ms}ms:`,
-      message
-    );
-    return NextResponse.json(
-      { error: "sheet_unreachable", detail: message, ms },
-      { status: 502 }
-    );
-  }
-
-  const responseText = await sheetRes.text().catch(() => "");
+  const { error } = await supabase.from("claims").insert(row);
   const ms = Date.now() - startedAt;
 
-  if (!sheetRes.ok) {
+  if (error) {
     console.error(
-      `[loyalty/claim] Sheets webhook returned ${sheetRes.status} after ${ms}ms (final URL: ${sheetRes.url}). Body:`,
-      responseText.slice(0, 500)
+      `[loyalty/claim] Supabase insert failed after ${ms}ms:`,
+      error.message,
+      error.details ?? "",
+      error.hint ?? ""
     );
     return NextResponse.json(
       {
-        error: "sheet_write_failed",
-        status: sheetRes.status,
-        finalUrl: sheetRes.url,
-        body: responseText.slice(0, 500),
+        error: "db_insert_failed",
+        // Echo Supabase's error message so the user can see it in the network
+        // tab during setup. Once it's working you'll never see this branch.
+        message: error.message,
+        hint: error.hint ?? null,
         ms,
       },
       { status: 502 }
     );
   }
 
-  // Apps Script sometimes returns 200 with `{ ok: false, error }` in the body
-  // (e.g. if the script itself threw). Try to surface that.
-  try {
-    const parsed = JSON.parse(responseText) as { ok?: boolean; error?: string };
-    if (parsed && parsed.ok === false) {
-      console.error(
-        `[loyalty/claim] Apps Script reported failure after ${ms}ms:`,
-        parsed
-      );
-      return NextResponse.json(
-        {
-          error: "script_reported_failure",
-          scriptError: parsed.error ?? "unknown",
-          ms,
-        },
-        { status: 502 }
-      );
-    }
-  } catch {
-    // Non-JSON response is fine — Apps Script returns text/html sometimes.
-  }
-
-  console.log(
-    `[loyalty/claim] Sheets webhook ok in ${ms}ms (final URL host: ${new URL(sheetRes.url).host})`
-  );
+  console.log(`[loyalty/claim] Claim persisted to Supabase in ${ms}ms`);
   return NextResponse.json({ ok: true, persisted: true, ms });
 }
