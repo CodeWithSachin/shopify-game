@@ -150,14 +150,17 @@ export function ClaimForm({ loyaltyPoints, score, onSubmitted }: ClaimFormProps)
 
   if (submitted) {
     return (
-      <div className="rounded-lg border border-spykar-success/40 bg-spykar-success/5 p-6 text-center">
-        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-spykar-success text-white shadow-md">
+      // Bright card on top of the denim result panel — matches the visual
+      // pattern of the score / loyalty cards (light surface, dark text) so
+      // the success message reads clearly against the dark backdrop.
+      <div className="rounded-lg border border-spykar-success/40 bg-gradient-to-b from-white to-spykar-success/15 p-6 text-center text-spykar-ink shadow-md">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-spykar-success text-white shadow-md">
           <Check className="h-6 w-6" strokeWidth={2.5} />
         </div>
-        <p className="mt-4 text-lg font-extrabold text-spykar-ink">
+        <p className="mt-4 text-xl font-extrabold text-spykar-ink">
           Thank You
         </p>
-        <p className="mx-auto mt-1.5 max-w-xs text-sm text-muted-foreground">
+        <p className="mx-auto mt-2 max-w-xs text-sm text-spykar-ink/80">
           Once verified, we will be adding{" "}
           <span className="font-semibold text-spykar-ink">
             {loyaltyPoints} Loyalty Points
